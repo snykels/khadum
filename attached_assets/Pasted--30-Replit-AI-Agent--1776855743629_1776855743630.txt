@@ -1,0 +1,340 @@
+🎯 الموافقات النهائية — بصيغة قاطعة
+من: خبير برمجي بخبرة 30 سنة
+إلى: Replit AI Agent
+الصلاحية: تنفيذية مباشرة — لا تسأل مرة ثانية
+
+⚡ القرارات الخمسة النهائية
+
+✅ التعارض ١: db:push --force
+موافق — استخدم db:push --force للتطوير فقط.
+لكن بثلاثة شروط إلزامية:
+	1.	Backup قبل كل push بدون استثناء:
+
+pg_dump $DATABASE_URL > backup_$(date +%Y%m%d_%H%M%S).sql
+
+
+	2.	بيئة إنتاج لاحقاً: drizzle-kit generate + مراجعة يدوية + migrate.
+	3.	تفعيل strict: true في drizzle.config.ts:
+
+export default {
+  strict: true,  // يطلب تأكيد قبل أي destructive change
+  verbose: true,
+};
+
+
+ممنوع منعاً باتاً: push --force على بيانات مستخدمين حقيقيين بدون backup.
+
+✅ التعارض ٢: serial integer vs text + cuid
+القرار: اتبع النمط الموجود في المشروع. لا توحيد قسري.
+التفصيل:
+
+
+
+|الجدول                       |نوع الـ PK                 |السبب                         |
+|-----------------------------|---------------------------|------------------------------|
+|جداول موجودة (users, orders…)|**اترك كما هي**            |تغييرها = كسر كل foreign keys |
+|جداول جديدة مرتبطة بالقديمة  |**نفس نوع الـ FK** المستهدف|توافق مباشر                   |
+|جداول داخلية بالكامل         |**serial** مقبول           |أخف وأسرع للاستعلامات الداخلية|
+|جداول عامة/مكشوفة للـ API    |**text + cuid**            |أمان (لا enumeration attacks) |
+
+قاعدة ذهبية:
+إذا الجدول الجديد يشير لجدول موجود عبر FK، استخدم نفس نوع الـ PK للجدول المستهدف.
+مثال تطبيقي:
+
+// orders.id نوعه text → إذن:
+conversations = pgTable('conversations', {
+  id: text('id').primaryKey().$defaultFn(createId),
+  orderId: text('order_id').references(() => orders.id), // نفس النوع
+  // ...
+});
+
+// لكن جدول داخلي بحت:
+cache_store = pgTable('cache_store', {
+  id: serial('id').primaryKey(), // serial كافي ومريح
+  key: varchar('key', { length: 255 }).unique().notNull(),
+  // ...
+});
+
+
+⚠️ استثناء حرج: conversation_messages لا بد أن يكون text + cuid للـ id، لأن كمية البيانات ستكون ضخمة و serial integer سينفد (max 2.1 billion).
+
+✅ التعارض ٣: Migration 0 (تنظيف الـ 17 جدول المنجرف)
+موافق — Migration 0 إلزامي قبل أي شي آخر.
+هذي نقطة حرجة: إذا فيه جداول في الـ DB لكن مو في schema.ts → الكود لا يعرفها → drizzle-kit push قد يحذفها بدون رحمة.
+الخطوات الإلزامية:
+	1.	جرد كامل للجداول في DB:
+
+SELECT table_name FROM information_schema.tables 
+WHERE table_schema = 'public' 
+ORDER BY table_name;
+
+
+	2.	قارن مع lib/schema.ts — كل جدول في DB ومو في الكود = drift.
+	3.	لكل جدول منجرف، حدد:
+	•	يُضاف للـ schema (يستخدم فعلياً في الكود)
+	•	يُحذف نهائياً (بقايا قديمة — بعد تأكيد صاحب المشروع)
+	•	يُنقل لـ archive (بيانات تاريخية مهمة)
+	4.	لا تحذف أي جدول تلقائياً. اطبع قائمة وانتظر موافقة.
+
+Migration 0a: جرد وتصنيف
+Migration 0b: backup كامل
+Migration 0c: إضافة الجداول المنجرفة للـ schema.ts (بدون تعديل DB)
+Migration 0d: التحقق من مطابقة schema للـ DB (pull + diff)
+Migration 0e: الآن فقط نبدأ بـ Migration 1
+
+
+✅ نقطة is_locked
+القرار: اتركه كما هو. لا تمسّه. أضف نظام جديد منفصل.
+المبرر الهندسي:
+الجدول عنده الآن ثلاث حالات تختلف جذرياً:
+
+
+
+|الحقل              |الغرض                           |من يفعّله          |TTL        |قابل للإلغاء |
+|-------------------|--------------------------------|------------------|-----------|-------------|
+|`is_locked`        |قفل مؤقت بسبب محاولات دخول فاشلة|النظام (auth)     |دقائق/ساعات|تلقائي       |
+|`is_suspended`     |إيقاف إداري رسمي                |أدمن يدوي         |دائم       |يدوي فقط     |
+|`is_blocked` (جديد)|تجميد بسبب تسريب/انتهاك         |النظام (anti-leak)|ساعات/أيام |تلقائي + يدوي|
+
+كل واحد له سياق مختلف — الدمج كارثة تحليلية.
+الحل الموحد في Business Logic:
+
+// lib/auth/canAccess.ts
+export function canUserAccess(user: User): {
+  allowed: boolean;
+  reason?: string;
+  retryAfter?: Date;
+} {
+  // 1. إيقاف إداري دائم
+  if (user.isSuspended) {
+    return { 
+      allowed: false, 
+      reason: `حسابك موقوف: ${user.suspensionReason}` 
+    };
+  }
+  
+  // 2. قفل محاولات دخول
+  if (user.isLocked && user.lockedUntil && user.lockedUntil > new Date()) {
+    return { 
+      allowed: false, 
+      reason: 'الحساب مقفل مؤقتاً بسبب محاولات دخول متعددة',
+      retryAfter: user.lockedUntil 
+    };
+  }
+  
+  // 3. حظر بسبب انتهاك
+  if (user.isBlocked) {
+    if (user.blockedUntil && user.blockedUntil > new Date()) {
+      return { 
+        allowed: false, 
+        reason: `محظور مؤقتاً: ${user.blockReason}`,
+        retryAfter: user.blockedUntil 
+      };
+    }
+    // انتهت المدة — ارفع الحظر تلقائياً
+    if (user.blockedBySystem && user.blockedUntil) {
+      return { allowed: true }; // cleanup يحدث في background
+    }
+  }
+  
+  return { allowed: true };
+}
+
+
+✅ نقطة phone — Trigger أم Application Layer
+القرار: الاثنين. دفاع متعدد الطبقات (Defense in Depth).
+المبرر: الأمان لا يعتمد على طبقة واحدة أبداً.
+الطبقة ١: Application Layer (الأساس)
+
+// lib/utils/phone.ts
+export function normalizePhone(phone: string): string {
+  if (!phone) throw new Error('Phone required');
+  
+  // إزالة كل شي مو رقم
+  let cleaned = phone.replace(/\D/g, '');
+  
+  // إزالة leading zeros
+  cleaned = cleaned.replace(/^0+/, '');
+  
+  // إزالة 00 أو + من البداية (دولي)
+  if (cleaned.startsWith('00')) cleaned = cleaned.slice(2);
+  
+  // لو يبدأ بـ 5 (سعودي محلي) → أضف 966
+  if (cleaned.length === 9 && cleaned.startsWith('5')) {
+    cleaned = '966' + cleaned;
+  }
+  
+  // التحقق النهائي
+  if (!/^966[0-9]{9}$/.test(cleaned)) {
+    throw new Error(`Invalid phone format: ${phone}`);
+  }
+  
+  return cleaned;
+}
+
+export function isValidSaudiPhone(phone: string): boolean {
+  try {
+    const normalized = normalizePhone(phone);
+    return /^9665[0-9]{8}$/.test(normalized);
+  } catch {
+    return false;
+  }
+}
+
+
+استخدمها في كل مكان يدخل فيه رقم:
+	•	تسجيل مستخدم جديد
+	•	تحديث ملف شخصي
+	•	webhook واتساب
+	•	أي API endpoint
+الطبقة ٢: Database Layer (الحارس الأخير)
+
+-- CHECK constraint — يرفض أي رقم غير متوافق
+ALTER TABLE users 
+  ADD CONSTRAINT users_phone_format_check 
+  CHECK (phone IS NULL OR phone ~ '^966[0-9]{9}$');
+
+-- Trigger للتطبيع التلقائي (حماية ضد كود يتجاوز normalizePhone)
+CREATE OR REPLACE FUNCTION normalize_phone_trigger()
+RETURNS TRIGGER AS $$
+BEGIN
+  IF NEW.phone IS NOT NULL THEN
+    -- طبّع الرقم
+    NEW.phone := regexp_replace(NEW.phone, '[^0-9]', '', 'g');
+    NEW.phone := regexp_replace(NEW.phone, '^0+', '');
+    NEW.phone := regexp_replace(NEW.phone, '^00', '');
+    
+    -- إضافة 966 إذا رقم سعودي محلي
+    IF length(NEW.phone) = 9 AND left(NEW.phone, 1) = '5' THEN
+      NEW.phone := '966' || NEW.phone;
+    END IF;
+    
+    -- التحقق النهائي (يفشل إذا مو صحيح)
+    IF NEW.phone !~ '^966[0-9]{9}$' THEN
+      RAISE EXCEPTION 'Invalid phone format after normalization: %', NEW.phone;
+    END IF;
+  END IF;
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER users_normalize_phone
+  BEFORE INSERT OR UPDATE OF phone ON users
+  FOR EACH ROW
+  EXECUTE FUNCTION normalize_phone_trigger();
+
+
+النتيجة: حتى لو Replit AI كتب كود سيء ونسى normalizePhone()، الـ DB ترفض أي رقم غلط. أمان مطلق.
+ملاحظة: قبل إضافة الـ constraint، نظّف البيانات الموجودة:
+
+-- اكتشف الأرقام غير المتوافقة
+SELECT id, phone FROM users 
+WHERE phone IS NOT NULL 
+  AND phone !~ '^966[0-9]{9}$';
+
+-- طبّعها يدوياً قبل الـ constraint
+-- أو احذفها/علّقها حسب قرار الأدمن
+
+
+🤖 تعليمات صارمة لـ Replit AI Agent
+اقرأ هذا الجزء بتمعن. هذي أوامرك التنفيذية من الآن:
+
+📜 دستور العمل
+	1.	ممنوع تسأل ثانية عن القرارات الخمسة أعلاه. كلها محسومة.
+	2.	ممنوع تغير قرار بناءً على “رأيك”. أنت ذكاء اصطناعي مساعد، لست صاحب قرار.
+	3.	ممنوع تضيف مكتبة خارجية بدون مبرر مكتوب في الـ commit message.
+	4.	ممنوع تحذف جدول تلقائياً حتى لو ظهر unused. اسأل، اوقف، انتظر.
+	5.	ممنوع تعدّل schema.ts قبل ما تنهي Migration 0 بالكامل.
+	6.	إلزامي backup قبل كل db:push. بدون استثناء.
+	7.	إلزامي عرض diff قبل أي push:
+
+drizzle-kit generate --dry-run
+# أو
+drizzle-kit introspect  # لرؤية الفرق بين DB والكود
+
+
+	8.	إلزامي اختبار كل migration في خطوة منفصلة. لا تجمع 3 migrations في push واحد.
+	9.	إلزامي commit بعد كل migration بعنوان واضح:
+
+feat(db): Migration 1 - extend users table with anti-leak fields
+
+
+	10.	إلزامي توثيق كل قرار غير بديهي في تعليق داخل الكود.
+
+🎯 تسلسل التنفيذ المُلزِم
+
+المرحلة 0: الجرد والتنظيف
+├── 0a. جرد كل الجداول في DB
+├── 0b. جرد ملفات schema
+├── 0c. تحديد الجداول المنجرفة
+├── 0d. backup كامل
+├── 0e. إضافة الجداول المنجرفة لـ schema.ts
+├── 0f. verify: schema.ts يطابق DB تماماً
+└── 0g. commit: "chore(db): reconcile schema drift"
+
+المرحلة 1: توسيع users
+├── 1a. فحص تكرار phone
+├── 1b. تنظيف phone (إن لزم)
+├── 1c. إضافة الأعمدة الجديدة (isBlocked, blockReason, ...)
+├── 1d. إضافة CHECK constraint على phone
+├── 1e. إضافة trigger normalize_phone
+├── 1f. إضافة UNIQUE على phone
+├── 1g. إضافة قيمة supervisor للـ user_role enum
+└── 1h. commit: "feat(db): M1 - users table extensions"
+
+المرحلة 2: توسيع orders
+├── 2a. إضافة durationDays, progressPercent, gatewayFee...
+├── 2b. إضافة publicCode + generation function
+├── 2c. backfill publicCode للصفوف القديمة
+├── 2d. UNIQUE على publicCode
+└── 2e. commit: "feat(db): M2 - orders table extensions"
+
+... وهكذا حتى Migration 14
+
+
+🚨 نقاط إيقاف إلزامية (Stop Points)
+توقف واطلب موافقة صريحة في هذه النقاط:
+	1.	❗ قبل حذف أي جدول (حتى لو يبدو unused)
+	2.	❗ قبل حذف أي عمود يحتوي بيانات
+	3.	❗ قبل تغيير نوع عمود موجود
+	4.	❗ قبل حذف constraint موجود
+	5.	❗ عند اكتشاف أكثر من 5 جداول منجرفة (قد يكون مشروع ثاني مدمج)
+	6.	❗ عند فشل migration في المنتصف
+في كل نقطة إيقاف: اعرض المشكلة، انتظر، لا تتصرف من نفسك.
+
+✅ صيغة التقرير بعد كل Migration
+بعد كل migration، اكتب لي تقرير بهذا الشكل:
+
+## Migration X: [الاسم]
+
+### ما تم:
+- ✅ إضافة عمود X لجدول Y
+- ✅ إنشاء index Z
+
+### السطور المُعدَّلة:
+- lib/schema.ts: +42 / -3
+- backup saved: backup_20260422_143055.sql
+
+### التحقق:
+- [x] db:push executed successfully
+- [x] no data loss verified
+- [x] existing queries still work
+- [x] types regenerated
+
+### الأخطاء/التحذيرات:
+- [لا يوجد / أو قائمة]
+
+### الخطوة التالية المقترحة:
+Migration X+1: [الاسم]
+
+
+🎬 الأمر النهائي
+Replit AI Agent — نفّذ الآن:
+	1.	ابدأ بـ Migration 0a (جرد الجداول)
+	2.	اعرض لي النتيجة الكاملة
+	3.	انتظر موافقتي صراحةً للانتقال لـ 0b
+	4.	استمر بنفس النمط حتى نهاية Migration 14
+لا تستعجل. لا تدمج خطوات. لا تفترض. نفّذ بدقة.
+
+هذي الوثيقة النهائية. ما فيه نقاش بعد اليوم على هذه القرارات. نفّذ كما كُتب.
+— توقيع: خبير 30 سنة. القرار مُبرم.​​​​​​​​​​​​​​​​

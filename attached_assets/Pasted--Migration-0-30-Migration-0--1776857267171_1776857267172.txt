@@ -1,0 +1,206 @@
+✅ ممتاز — Migration 0 مُعتمدة رسمياً
+من: خبير برمجي بخبرة 30 سنة
+الحالة: موافقة على Migration 0 + إذن بدء Migration 1
+
+🎯 تقييم Migration 0
+ما حصل:
+✅ lib/schema.ts الآن = DB الفعلية (33 جدول)
+✅ Backup محفوظ (844K)
+✅ صفر فقدان بيانات (تأكدت من الأعداد الحرجة)
+✅ التغييرات = cosmetic فقط (constraint renames)
+✅ التطبيق يعمل (HTTP 200)
+✅ Commit نظيف
+التقييم: ممتاز. لا نحتاج مراجعة إضافية.
+
+🚦 القرار: أكمل إلى Migration 1 فوراً
+لا داعي لإيقاف. العمل نظيف، والتوقف الآن إهدار.
+
+📋 بروتوكول Migration 1 — توسعة users
+الأعمدة المطلوب إضافتها:
+حسب ما اتفقنا في القرارات السابقة:
+
+// أعمدة الـ anti-leak والـ brokerage
+avgResponseTime: integer('avg_response_time'),         // بالدقائق
+disputesCount: integer('disputes_count').notNull().default(0),
+rating: decimal('rating', { precision: 3, scale: 2 }).notNull().default('0'),
+completedProjects: integer('completed_projects').notNull().default(0),
+
+// نظام الحظر المنفصل عن isSuspended و isLocked
+isBlocked: boolean('is_blocked').notNull().default(false),
+blockReason: varchar('block_reason', { length: 255 }),
+blockedAt: timestamp('blocked_at'),
+blockedUntil: timestamp('blocked_until'),
+blockedBySystem: boolean('blocked_by_system').notNull().default(false),
+
+// عداد محاولات التسريب
+leakAttemptsCount: integer('leak_attempts_count').notNull().default(0),
+lastLeakAttemptAt: timestamp('last_leak_attempt_at'),
+
+
+التعديلات على الـ enum:
+
+// إضافة قيمة supervisor
+export const userRoleEnum = pgEnum('user_role', 
+  ['client', 'freelancer', 'admin', 'supervisor']
+);
+
+
+التعديل على phone:
+هذا الجزء الحساس. لا تتعجل فيه.
+
+🚨 خطوات Migration 1 الصارمة
+1a. فحص بيانات phone قبل أي تعديل
+
+-- كم مستخدم عنده phone
+SELECT COUNT(*) FROM users WHERE phone IS NOT NULL;
+
+-- فحص التكرار
+SELECT phone, COUNT(*) as cnt, array_agg(id) as user_ids
+FROM users 
+WHERE phone IS NOT NULL 
+GROUP BY phone 
+HAVING COUNT(*) > 1;
+
+-- فحص الصيغ غير المتوافقة
+SELECT id, name, phone, 
+       phone ~ '^966[0-9]{9}$' as is_normalized
+FROM users 
+WHERE phone IS NOT NULL 
+  AND phone !~ '^966[0-9]{9}$';
+
+
+اعرض لي النتائج. لا تُكمل قبل موافقتي.
+1b. تنظيف البيانات (إن لزم)
+حسب نتائج 1a:
+	•	لو فيه تكرار → اعرض لي وانتظر قرار أي مستخدم يحتفظ بالرقم
+	•	لو فيه صيغ غلط → طبّعها عبر script مع backup
+1c. backup فوري
+
+npm run db:backup
+# يجب أن ينشئ: .local/backups/backup_before_m1_XXXX.sql
+
+
+1d. تعديل lib/schema.ts
+أضف فقط:
+	•	الأعمدة الجديدة (11 عمود)
+	•	قيمة supervisor للـ enum
+	•	ليس phone unique بعد — هذا في خطوة منفصلة
+1e. dry-run
+
+npm run db:diff
+
+
+اعرض لي الـ SQL المُولَّد.
+معايير القبول:
+	•	✅ ALTER TABLE users ADD COLUMN ... (للـ 11 عمود)
+	•	✅ ALTER TYPE user_role ADD VALUE 'supervisor'
+	•	❌ لا DROP على أي شي
+	•	❌ لا ALTER COLUMN TYPE على أعمدة موجودة
+1f. التنفيذ
+
+npm run db:push:safe
+
+
+1g. التحقق
+
+-- تأكد من إضافة الأعمدة
+\d users
+
+-- تأكد من إضافة enum value
+SELECT enum_range(NULL::user_role);
+
+-- تأكد من عدم فقدان بيانات
+SELECT COUNT(*) FROM users; -- يجب = 16
+SELECT COUNT(*) FROM orders; -- يجب = 7
+
+
+1h. اختبار التطبيق
+
+# شغّل الـ dev
+npm run dev
+
+# اختبر:
+# - تسجيل دخول مستخدم موجود
+# - عرض لوحة أدمن
+# - عرض قائمة المستخدمين
+
+
+1i. commit
+
+feat(db): M1 - extend users table with anti-leak and brokerage fields
+
+- Add 11 new columns (rating, disputes, blocks, leaks, ...)
+- Add 'supervisor' role to user_role enum
+- Preserve existing isSuspended and isLocked semantics
+- Phone uniqueness deferred to M1.5
+
+
+🚦 نقطة إيقاف إلزامية داخل Migration 1
+Migration 1.5 (منفصلة): phone unique + trigger + constraint
+هذي مو جزء من M1. نسويها بعد ما الأعمدة الجديدة تستقر، لأنها أخطر خطوة (قد ترفض بيانات موجودة).
+ترتيب العمل:
+
+M1:   الأعمدة الجديدة + supervisor enum ← ابدأ هنا
+  ↓
+M1.5: phone normalization + unique + CHECK + trigger ← بعد M1 ينجح
+  ↓
+M2:   توسعة orders
+
+
+📄 صيغة التقرير المطلوبة بعد M1
+
+## تقرير Migration 1 — users extensions
+
+### 1a نتيجة فحص phone:
+- إجمالي: X مستخدم عندهم phone
+- تكرار: X صف
+- صيغ غلط: X صف
+- [تفاصيل لو فيه مشاكل]
+
+### 1c Backup:
+- الملف: backup_before_m1_XXXX.sql (XKB)
+
+### 1d Schema edits:
+- lib/schema.ts: +13 سطر تقريباً
+
+### 1e Dry run SQL:
+```sql
+[الـ SQL المُولَّد كامل]
+
+
+1f Push result:
+	•	[نجح/فشل]
+	•	destructive changes: [لا يوجد / قائمة]
+1g Verification:
+	•	11 عمود جديد مضاف
+	•	supervisor في الـ enum
+	•	عدد users = 16 (لم يتغير)
+	•	عدد orders = 7 (لم يتغير)
+1h App test:
+	•	HTTP 200 على /
+	•	login يعمل
+	•	admin panel يعمل
+Commit:
+	•	hash: XXXX
+	•	message: “feat(db): M1 - …”
+جاهز لـ M1.5 (phone constraints)?
+[نعم/لا + السبب]
+
+
+---
+
+## 🎬 الأمر النهائي
+
+**Replit AI — ابدأ Migration 1 الآن:**
+
+1. **نفّذ 1a** (فحص phone) — اعرض النتائج
+2. **انتظر موافقتي** على خطة التنظيف (إن لزم)
+3. **استمر** في 1b حتى 1i
+4. **قدّم التقرير** بالصيغة أعلاه
+5. **لا تبدأ M1.5** قبل موافقتي
+
+---
+
+**واصل. أنت تعمل بمستوى محترف. استمر بنفس الدقة.**
+
+— القرار: **GO**.​​​​​​​​​​​​​​​​

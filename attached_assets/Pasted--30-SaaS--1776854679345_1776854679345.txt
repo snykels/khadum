@@ -1,0 +1,230 @@
+🎯 القرار التقني النهائي — مشروع “خدوم”
+من: خبير برمجي (30 سنة خبرة في الأنظمة الموزعة والـ SaaS)
+إلى: فريق التنفيذ / الذكاء الاصطناعي المساعد
+الموضوع: اعتماد ORM وطبقة التخزين المؤقت
+
+🔐 القرارات النهائية (غير قابلة للنقاش)
+١. الـ ORM: Drizzle — نستمر عليه
+لا نغيّر الـ ORM. تغييره الآن يساوي إعادة كتابة المشروع من الصفر. Drizzle قرار صحيح من البداية للأسباب التالية:
+	•	Type-safe بامتياز — كل استعلام مفحوص وقت الكتابة، لا مفاجآت في الإنتاج.
+	•	أداء متفوق — لا يوجد runtime overhead مثل Prisma. مهم جداً على بيئة Replit المحدودة الموارد.
+	•	قريب من SQL الحقيقي — المطور يبقى متحكم، ولا يختبئ خلف abstractions.
+	•	لا يحتاج code generation بعد كل تعديل schema. تحديث مباشر.
+	•	حجم bundle أصغر — سرعة تحميل أفضل في السيرفر.
+الحكم: Drizzle يبقى. أي نقاش في هذا الموضوع مرفوض.
+
+٢. طبقة التخزين: PostgreSQL حصرياً (في هذه المرحلة)
+قرار استراتيجي: كل شيء في PostgreSQL. لا Redis، لا Replit KV، لا خدمات خارجية.
+المبرر الهندسي:
+
+
+
+|المعيار                  |PostgreSQL وحده|PostgreSQL + Redis        |
+|-------------------------|---------------|--------------------------|
+|**التكلفة**              |$0 إضافي       |$10-30/شهر + network      |
+|**التعقيد التشغيلي**     |خدمة واحدة     |خدمتين (+failure modes)   |
+|**DevOps overhead**      |صفر            |مراقبة + نسخ احتياطي إضافي|
+|**الأداء للحجم الحالي**  |ممتاز          |overkill                  |
+|**نقاط الفشل**           |واحدة          |اثنتان                    |
+|**Transaction atomicity**|مباشر          |معقد (two-phase commit)   |
+
+القاعدة الذهبية في الهندسة:
+“Premature optimization is the root of all evil” — Donald Knuth
+لا تضيف Redis قبل أن تثبت بالأرقام أنك تحتاجه. معظم المشاريع اللي وقعت في فخ over-engineering بدأت بإضافة Redis قبل ما تحصل على مستخدم واحد حقيقي.
+
+٣. استراتيجية الأقفال والتخزين المؤقت
+سنستخدم ثلاث أدوات داخل PostgreSQL:
+أ. PostgreSQL Advisory Locks (للـ race conditions)
+
+// قفل ذري على مستوى السيرفر، سريع جداً (microseconds)
+// مبني في Postgres، لا يحتاج جدول
+await db.execute(sql`SELECT pg_advisory_xact_lock(${hashKey})`);
+// القفل يُحرر تلقائياً عند انتهاء الـ transaction
+
+
+الاستخدامات:
+	•	منع معالجة نفس رسالة واتساب مرتين
+	•	منع تحديث محادثة من thread متزامنين
+	•	ضمان تسلسل المعاملات المالية
+ب. جدول cache_store (للبيانات المؤقتة)
+
+CREATE TABLE cache_store (
+  key         VARCHAR(255) PRIMARY KEY,
+  value       JSONB NOT NULL,
+  expires_at  TIMESTAMP NOT NULL,
+  created_at  TIMESTAMP NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX idx_cache_expires ON cache_store(expires_at)
+  WHERE expires_at > NOW();
+
+
+الاستخدامات:
+	•	أنماط التسريب (آخر 10 رسائل مشبوهة لكل مستخدم)
+	•	Rate limiting counters
+	•	جلسات OTP مؤقتة
+	•	Cache لاستعلامات AI الثقيلة
+ج. Cron job للتنظيف (كل ساعة)
+
+DELETE FROM cache_store WHERE expires_at < NOW();
+
+
+🏗️ البنية المعتمدة نهائياً
+
+┌──────────────────────────────────────────────────────────┐
+│                                                          │
+│              تطبيق Next.js (على Replit)                │
+│                                                          │
+│  ┌────────────────────────────────────────────────────┐ │
+│  │          طبقة الخدمات (Services)                   │ │
+│  │  • WhatsAppService                                 │ │
+│  │  • LeakDetectionService                            │ │
+│  │  • DisputeService                                  │ │
+│  │  • RefundCalculatorService                         │ │
+│  └────────────────────────────────────────────────────┘ │
+│                         │                                │
+│  ┌────────────────────────────────────────────────────┐ │
+│  │          طبقة البيانات (Drizzle ORM)              │ │
+│  │  • type-safe queries                               │ │
+│  │  • migrations                                      │ │
+│  │  • schema definitions                              │ │
+│  └────────────────────────────────────────────────────┘ │
+│                         │                                │
+└─────────────────────────┼────────────────────────────────┘
+                          │
+                          ▼
+┌──────────────────────────────────────────────────────────┐
+│                                                          │
+│                PostgreSQL (Replit Database)              │
+│                                                          │
+│  ┌─────────────────────────┐  ┌────────────────────┐   │
+│  │   البيانات الدائمة      │  │  جدول cache_store  │   │
+│  │   ━━━━━━━━━━━━━━       │  │  ━━━━━━━━━━━━━━   │   │
+│  │   • users               │  │  • أنماط التسريب   │   │
+│  │   • projects            │  │  • rate limits     │   │
+│  │   • conversations       │  │  • tmp sessions    │   │
+│  │   • messages            │  │  • AI query cache  │   │
+│  │   • payments            │  │                    │   │
+│  │   • disputes            │  │  (TTL-based)       │   │
+│  └─────────────────────────┘  └────────────────────┘   │
+│                                                          │
+│  ┌────────────────────────────────────────────────────┐ │
+│  │        Advisory Locks (مبنية في Postgres)         │ │
+│  │  pg_advisory_lock / pg_advisory_unlock            │ │
+│  └────────────────────────────────────────────────────┘ │
+│                                                          │
+└──────────────────────────────────────────────────────────┘
+
+
+📏 معايير واضحة لإضافة Redis مستقبلاً
+لا نضيف Redis إلا عند تحقق ٢ من الشروط التالية:
+	1.	✅ تجاوز 5,000 رسالة واتساب يومياً
+	2.	✅ وجود 50+ مستقل نشط متزامن
+	3.	✅ استهلاك قاعدة البيانات يتجاوز 70% CPU بشكل متكرر
+	4.	✅ زمن استجابة الأقفال يتجاوز 100ms
+	5.	✅ الحاجة الفعلية لـ pub/sub حقيقي بين سيرفرات متعددة
+قبل تحقق هذه الشروط، Redis ترف لا حاجة.
+
+⚠️ تحذيرات هندسية يجب مراعاتها
+١. Connection Pooling إلزامي
+Replit PostgreSQL له حد اتصالات. استخدم postgres.js مع pool:
+
+import postgres from 'postgres';
+
+const sql = postgres(DATABASE_URL, {
+  max: 10, // max connections
+  idle_timeout: 20,
+  connect_timeout: 10,
+});
+
+
+٢. Index على كل foreign key
+لا تنسَ أبداً:
+
+// في كل جدول مرتبط
+index('idx_messages_conversation').on(table.conversationId)
+
+
+٣. JSONB بدل JSON
+في جدول cache_store استخدم jsonb — أسرع للقراءة ويدعم indexing.
+٤. Prepared Statements
+Drizzle يدعمها. استخدمها للاستعلامات المتكررة:
+
+const getMessageStmt = db
+  .select()
+  .from(messages)
+  .where(eq(messages.id, sql.placeholder('id')))
+  .prepare('getMessage');
+
+
+٥. تجنب N+1 Queries
+استخدم with في Drizzle لجلب العلاقات دفعة واحدة:
+
+const conversation = await db.query.conversations.findFirst({
+  where: eq(conversations.id, id),
+  with: {
+    messages: { limit: 50, orderBy: desc(messages.createdAt) },
+    project: true
+  }
+});
+
+
+٦. مراقبة بطيئة الاستعلامات
+فعّل pg_stat_statements extension وراقب أبطأ 10 استعلامات أسبوعياً.
+
+🎯 التوجيه النهائي للتنفيذ
+المطلوب الآن (بالترتيب):
+الخطوة ١: جرد الوضع الحالي (قبل أي كود)
+
+# اعرض محتوى الـ schema الحالي
+cat src/db/schema.ts
+
+
+	•	اعرض لي المحتوى كاملاً
+	•	حدد الجداول الموجودة والأعمدة
+	•	حدد الـ enums الموجودة
+	•	لا تكتب سطر كود واحد قبل هذا
+الخطوة ٢: جدول مقارنة
+اعمل جدول واضح:
+
+| الجدول        | موجود؟ | أعمدة موجودة  | أعمدة ناقصة   |
+| users         | ✅     | id, name, ... | phone, type,..|
+| conversations | ❌     | —             | (جدول جديد)   |
+
+
+الخطوة ٣: خطة التنفيذ
+اقترح ترتيب التنفيذ:
+	1.	ALTER TABLE للجداول الموجودة
+	2.	CREATE TABLE للجديدة
+	3.	CREATE TABLE cache_store
+	4.	الـ Migration files
+الخطوة ٤: التنفيذ
+بعد موافقتي فقط:
+	•	كل migration في ملف منفصل
+	•	كل تعديل معزول
+	•	testable و reversible
+
+🛡️ قواعد العمل مع هذا المشروع
+١. لا تضف مكتبة بدون مبرر مكتوب + موافقة
+٢. لا تغيّر ORM — Drizzle نهائي
+٣. لا تضف Redis قبل تحقق المعايير الخمسة أعلاه
+٤. لا تعدّل جدول موجود بدون ALTER migration واضح
+٥. لا تكتب كود قبل جرد الوضع الحالي
+٦. كل commit = ميزة واحدة قابلة للاختبار
+٧. TypeScript strict mode غير قابل للتعطيل
+�8. كل استعلام مُراجع للـ indexes قبل الدمج
+
+✅ الخلاصة التنفيذية
+
+
+
+|القرار        |النهائي                                |
+|--------------|---------------------------------------|
+|ORM           |**Drizzle** (مغلق)                     |
+|قاعدة البيانات|**PostgreSQL** (الحالية)               |
+|التخزين المؤقت|**جدول `cache_store` + Advisory Locks**|
+|Redis / KV    |**مرفوض حالياً** — معايير واضحة للمستقبل|
+|أولوية التنفيذ|**جرد → مقارنة → خطة → تنفيذ**         |
+
+ابدأ الآن بالخطوة ١: اعرض محتوى src/db/schema.ts الكامل. انتظر موافقتي قبل أي تعديل.
+— هذا قرار هندسي مبني على 30 سنة خبرة. نفّذ بدقة.​​​​​​​​​​​​​​​​
