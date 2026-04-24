@@ -1,0 +1,100 @@
+سأقترح عليك هيكلة احترافية ومرنة لنظام "إدارة بيانات وأتمتة"، وهي هيكلة قياسية تناسب أغلب التطبيقات الحديثة وتسمح بالتوسع مستقبلاً.
+
+### أسماء الجداول المقترحة:
+1.  **`users`**: لإدارة بيانات المستخدمين وصلاحيات الدخول.
+2.  **`categories`**: لتصنيف المنتجات أو المهام (علاقة واحد إلى متعدد).
+3.  **`items`**: الجدول الرئيسي الذي يحتوي على البيانات الأساسية (منتجات، تدوينات، أو مهام).
+4.  **`automation_logs`**: لتتبع العمليات التي تتم آلياً (مفيد جداً في مراقبة الأداء والأخطاء).
+
+
+
+---
+
+### أولاً: ملف `schema.sql`
+يمكنك نسخ هذا الكود ووضعه في ملف SQL داخل Replit:
+
+```sql
+-- تفعيل إضافة لتوليد معرفات فريدة إذا لزم الأمر
+CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+
+-- 1. جدول المستخدمين
+CREATE TABLE users (
+    id SERIAL PRIMARY KEY,
+    username VARCHAR(50) UNIQUE NOT NULL,
+    email VARCHAR(100) UNIQUE NOT NULL,
+    password_hash TEXT NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- 2. جدول التصنيفات
+CREATE TABLE categories (
+    id SERIAL PRIMARY KEY,
+    name VARCHAR(100) NOT NULL,
+    description TEXT,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- 3. جدول العناصر الأساسية (Items/Products)
+CREATE TABLE items (
+    id SERIAL PRIMARY KEY,
+    category_id INTEGER REFERENCES categories(id) ON DELETE SET NULL,
+    name VARCHAR(255) NOT NULL,
+    description TEXT,
+    price DECIMAL(10, 2),
+    metadata JSONB, -- لتخزين بيانات مرنة وتفاصيل إضافية
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- 4. جدول سجلات العمليات
+CREATE TABLE automation_logs (
+    id SERIAL PRIMARY KEY,
+    event_type VARCHAR(50), -- مثل: 'upload', 'update', 'error'
+    status VARCHAR(20),     -- مثل: 'success', 'failed'
+    details TEXT,
+    executed_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+```
+
+---
+
+### ثانياً: ملف الاتصال `database.py` (بواسطة Python)
+هذا الملف يستخدم مكتبة `psycopg2` للاتصال بقاعدة بيانات Postgres في Replit:
+
+```python
+import os
+import psycopg2
+from psycopg2.extras import RealDictCursor
+
+def get_db_connection():
+    # Replit يقوم بتخزين رابط الاتصال في متغير بيئة يسمى DATABASE_URL تلقائياً
+    db_url = os.environ.get('DATABASE_URL')
+    try:
+        conn = psycopg2.connect(db_url, sslmode='require')
+        return conn
+    except Exception as e:
+        print(f"خطأ في الاتصال بقاعدة البيانات: {e}")
+        return None
+
+def init_db():
+    conn = get_db_connection()
+    if conn:
+        with conn.cursor() as cur:
+            # قراءة ملف schema.sql وتنفيذه
+            with open('schema.sql', 'r') as f:
+                cur.execute(f.read())
+            conn.commit()
+            print("تم إنشاء الجداول بنجاح!")
+        conn.close()
+
+if __name__ == "__main__":
+    init_db()
+```
+
+### كيف تبدأ التنفيذ في Replit؟
+1.  تأكد من تفعيل **PostgreSQL** من تبويب **Tools** في أسفل اليسار.
+2.  أنشئ ملفاً جديداً باسم `schema.sql` وضع فيه الكود الأول.
+3.  أنشئ ملفاً باسم `database.py` وضع فيه الكود الثاني.
+4.  قم بتشغيل ملف `database.py` وسيتم بناء الجداول فوراً في قاعدة البيانات.
+
+هل هذه الجداول تغطي احتياجات مشروعك الحالي أم تود إضافة حقول مخصصة لجدول معين؟

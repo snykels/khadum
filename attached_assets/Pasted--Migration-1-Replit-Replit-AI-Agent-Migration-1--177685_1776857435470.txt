@@ -1,0 +1,113 @@
+🎬 تعليمات تنفيذية — Migration 1 (نسخة Replit)
+إلى: Replit AI Agent
+الموضوع: Migration 1 — توسعة جدول users بحقول الوساطة ومكافحة التسريب
+الصلاحية: GO — نفّذ بدقة
+
+⚡ ابدأ الآن بالترتيب التالي
+
+🔍 الخطوة 1a: فحص بيانات phone (لا تعديل، فقط قراءة)
+نفّذ الثلاث استعلامات التالية الآن واعرض لي النتائج:
+
+-- استعلام 1: إجمالي المستخدمين بأرقام
+SELECT 
+  COUNT(*) AS total_users,
+  COUNT(phone) AS users_with_phone,
+  COUNT(*) - COUNT(phone) AS users_without_phone
+FROM users;
+
+
+-- استعلام 2: فحص التكرار
+SELECT 
+  phone, 
+  COUNT(*) AS cnt, 
+  array_agg(id) AS user_ids,
+  array_agg(name) AS names,
+  array_agg(role) AS roles
+FROM users 
+WHERE phone IS NOT NULL 
+GROUP BY phone 
+HAVING COUNT(*) > 1;
+
+
+-- استعلام 3: فحص الصيغ غير المتوافقة
+SELECT 
+  id, 
+  name, 
+  role,
+  phone,
+  length(phone) AS phone_length,
+  phone ~ '^966[0-9]{9}$' AS is_normalized
+FROM users 
+WHERE phone IS NOT NULL 
+  AND phone !~ '^966[0-9]{9}$'
+ORDER BY role, id;
+
+
+-- استعلام 4 (إضافي): توزيع الصيغ الموجودة
+SELECT 
+  CASE 
+    WHEN phone ~ '^966[0-9]{9}$' THEN 'normalized (966XXXXXXXXX)'
+    WHEN phone ~ '^\+966[0-9]{9}$' THEN 'with_plus (+966)'
+    WHEN phone ~ '^00966[0-9]{9}$' THEN 'with_00966'
+    WHEN phone ~ '^0[0-9]{9}$' THEN 'local_with_zero (05X)'
+    WHEN phone ~ '^5[0-9]{8}$' THEN 'local_no_zero (5X)'
+    WHEN phone IS NULL THEN 'null'
+    ELSE 'other/invalid'
+  END AS format_type,
+  COUNT(*) AS count
+FROM users
+GROUP BY format_type
+ORDER BY count DESC;
+
+
+🛑 STOP بعد 1a
+اعرض لي النتائج في هذه الصيغة:
+
+## نتائج فحص phone (M1.1a)
+
+### استعلام 1 - الإجمالي:
+- total_users: X
+- users_with_phone: X
+- users_without_phone: X
+
+### استعلام 2 - التكرار:
+[لا يوجد / أو جدول بالقيم]
+
+### استعلام 3 - الصيغ غير المتوافقة:
+[لا يوجد / أو جدول بالصفوف المُخالفة]
+
+### استعلام 4 - توزيع الصيغ:
+| format_type | count |
+|---|---|
+| ... | ... |
+
+### توصيتي:
+[لا تحتاج تنظيف / تحتاج تنظيف — وسبب]
+
+
+انتظر موافقتي قبل أي خطوة بعدها.
+
+📋 الخطوات التالية (بعد موافقتي على 1a)
+سأعطيك إذن تنفيذ 1b حتى 1i حسب نتائج الفحص:
+إذا البيانات نظيفة:
+
+1c (backup) → 1d (schema edit) → 1e (dry-run) → 1f (push) → 1g (verify) → 1h (test) → 1i (commit)
+
+
+إذا فيه تكرار أو صيغ غلط:
+
+1a → [انتظار موافقة على خطة تنظيف] → 1b (تنظيف) → 1c → ... → 1i
+
+
+⚠️ تذكيرات نهائية قبل البدء
+	1.	ممنوع تعديل أي بيانات في الخطوة 1a. قراءة فقط.
+	2.	استخدم SELECT فقط في هذه المرحلة. لا UPDATE ولا DELETE.
+	3.	لا تلمس lib/schema.ts قبل موافقتي على نتائج 1a.
+	4.	اعرض كل شي حتى لو النتيجة “لا يوجد مشاكل” — أحتاج التأكيد.
+
+🎯 بعد إكمال الـ 4 استعلامات
+قدّم التقرير بالصيغة المذكورة أعلاه.
+لا تبدأ 1b أو أي خطوة أخرى. توقف. انتظر.
+
+نفّذ 1a الآن.
+— القرار: GO — لكن خطوة خطوة.

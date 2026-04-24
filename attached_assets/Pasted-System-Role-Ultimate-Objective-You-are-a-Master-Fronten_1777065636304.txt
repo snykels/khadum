@@ -1,0 +1,68 @@
+System Role & Ultimate Objective:
+You are a Master Frontend Developer and UI/UX Expert. Your task is to build a highly advanced, Notion-like "Block-Based Page Builder" and Rich Text Editor in a single-page static environment (HTML, CSS, Vanilla JavaScript).
+
+CRITICAL RULE: Do NOT use standard <textarea> or basic contenteditable WYSIWYG approaches. You MUST use Editor.js via CDN as the core engine. Absolutely NO native browser prompts (alert, prompt).
+
+Here are the precise, step-by-step requirements:
+
+1. Core Technologies & CDNs:
+Import the following dependencies via CDN in the <head>:
+
+Editor.js core (@editorjs/editorjs)
+
+Essential Plugins: @editorjs/header, @editorjs/list, @editorjs/checklist, @editorjs/inline-code
+
+Advanced UX Plugins: editorjs-drag-drop, editorjs-undo
+
+Columns Plugin: Include a stable community plugin for multi-column layouts (e.g., @calumk/editorjs-columns) so the user can build full-page grid structures.
+
+2. Build a Custom "FAQ / Accordion" Tool (JavaScript):
+Before initializing Editor.js, write a custom JavaScript class named FAQBlock that integrates with Editor.js.
+
+Structure: It must render two input fields: a bold, prominent input for the "Question", and a regular input below it for the "Answer".
+
+Interactivity: Add a toggle arrow icon. When the user clicks the Question, the Answer area should collapse/expand with a smooth CSS transition.
+
+Data Extraction: Ensure the save() method of this class returns { question: "...", answer: "..." }.
+
+3. Editor.js Initialization:
+Initialize EditorJS on a container with the ID editor-container.
+
+Enable autofocus.
+
+Register all plugins in the tools object, including the new FAQBlock (name it faq) and the Columns plugin.
+
+Ensure inlineToolbar is enabled for text-based blocks.
+
+Instantiate DragDrop(editor) and Undo({ editor }) inside the onReady callback.
+
+4. Custom Right-Click Context Menu (Native Feel):
+
+Disable the default browser right-click menu strictly inside the #editor-container using e.preventDefault().
+
+Create a beautifully styled floating div (Custom Context Menu) that appears at the mouse coordinates upon right-click.
+
+Menu items must include: [Copy, Paste, Turn to Heading, Delete Block]. Add basic JS logic to make these buttons functional using the Editor.js API where possible, or standard DOM manipulation.
+
+The menu must disappear when clicking anywhere else on the page.
+
+5. UI/UX & Dark Mode Styling (CSS):
+The design must look like a premium, modern dark-mode application.
+
+Page Background: #121212
+
+Canvas (Editor Container): #1e1e1e, centered on the page with a max-width of 1000px (acting as a page builder canvas), border: 1px solid #333, border-radius: 12px, padding: 50px, min-height: 80vh.
+
+Typography: Color #e0e0e0, use an elegant Arabic sans-serif font (like 'Tajawal' via Google Fonts) with direction: rtl and text-align: right.
+
+Editor.js Overrides: You MUST write CSS to override Editor.js default light styles. The floating toolbars, popovers, block settings menus, and plus icons must have a dark background (#2a2a2a) with light icons/text and soft drop shadows (box-shadow: 0 8px 24px rgba(0,0,0,0.5)).
+
+6. Data Export (Save Functionality):
+
+Create a sleek, primary button floating at the bottom left of the screen: <button id="save-btn">حفظ الصفحة</button>.
+
+On click, call editor.save().
+
+Take the resulting JSON data and display it elegantly in a styled, dark-themed Modal or <pre> block overlay, allowing the user to easily copy the final page structure.
+
+Ensure the final output includes the complete HTML, CSS, and JS code properly linked and ready to run immediately.

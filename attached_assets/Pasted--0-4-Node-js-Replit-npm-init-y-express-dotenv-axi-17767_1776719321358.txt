@@ -1,0 +1,148 @@
+إعداد المشروع والبيئة
+0/4
+▶
+إنشاء مشروع Node.js على Replit
+npm init -y ثم تثبيت express, dotenv, axios
+index.js
+إعداد ملف .env بمتغيرات البيئة
+META_TOKEN, PHONE_ID, OPENAI_KEY, DB_URL, REDIS_URL
+.env
+تثبيت المكتبات الأساسية
+express · axios · openai · pg · ioredis · n8n
+package.json
+ضبط Replit Secrets لحفظ المفاتيح بأمان
+لا تضع API keys داخل الكود مباشرة
+Secrets
+🔗
+Webhook — استقبال رسائل ميتا
+0/4
+▶
+إنشاء endpoint لـ GET /webhook للتحقق من ميتا
+verify_token يطابق القيمة في Meta Dashboard
+webhook.js
+إنشاء endpoint لـ POST /webhook لاستقبال الرسائل
+استخراج from, body, type من الـ payload
+webhook.js
+إضافة Middleware لـ JSON parsing والحماية
+express.json() + التحقق من X-Hub-Signature-256
+middleware.js
+تسجيل الـ Webhook URL في Meta Cloud API
+https://your-replit-url.repl.co/webhook
+Meta Dashboard
+🗄
+قاعدة البيانات — PostgreSQL + Redis
+0/6
+▶
+ربط PostgreSQL (Replit DB أو Neon.tech)
+استخدام pg client مع connection string
+db.js
+إنشاء جدول users (clients + freelancers)
+id, phone, name, role, created_at
+schema.sql
+إنشاء جدول orders
+id, client_id, freelancer_id, service, price, status, timestamps
+schema.sql
+إنشاء جدول messages لسجل المحادثات
+order_id, sender, content, direction, created_at
+schema.sql
+ربط Redis (Upstash على Replit)
+تخزين حالة المحادثة: state, step, context
+redis.js
+دالة getSession / setSession / clearSession
+مفتاح التخزين = رقم هاتف العميل
+session.js
+🤖
+محرك الذكاء الاصطناعي
+0/6
+▶
+ربط OpenAI API (GPT-4o mini)
+openai.chat.completions.create مع system prompt التخصصي
+ai.js
+كتابة System Prompt الرئيسي للبوت
+التخصص في خدمات المستقلين فقط — رفض أي سؤال خارجي
+prompts.js
+دالة classifyRequest لتصنيف طلب العميل
+يعيد: service_type, budget, deadline, extra
+ai.js
+دالة matchFreelancers للبحث في DB واختيار 3 مستقلين
+بناءً على service_type + تقييم المستقل
+matcher.js
+تطبيق Conversation Summarization بعد 8 رسائل
+تلخيص السياق وإرسال الملخص فقط لتقليل التوكنات
+ai.js
+دالة rejectOutOfScope لرفض الأسئلة العامة
+إذا لم يكن الطلب خدمة مستقل → رد اعتذار ثابت
+ai.js
+💬
+إرسال رسائل واتساب
+0/5
+▶
+دالة sendMessage لإرسال رسائل نصية حرة
+POST إلى Meta Cloud API — ضمن نافذة 24 ساعة (مجاني)
+whatsapp.js
+دالة sendTemplate لإرسال قوالب Utility
+تأكيد الطلب، رابط الدفع، تنبيه المستقل
+whatsapp.js
+دالة sendPaymentLink لإرسال رابط الدفع
+يُولَّد من بوابة الدفع ويُرسَل كـ Utility template
+whatsapp.js
+برمجة تذكير تلقائي قبل انتهاء النافذة بساعة
+cron job يتحقق من جلسات Redis القريبة من الانتهاء
+cron.js
+حفظ كل رسالة صادرة في جدول messages
+direction: outbound, timestamp, template_name إن وُجد
+whatsapp.js
+🔄
+منطق المحادثة (State Machine)
+0/6
+▶
+بناء State Machine للمحادثة
+IDLE → COLLECTING → MATCHING → NEGOTIATING → PAYMENT → DONE
+flow.js
+معالجة حالة COLLECTING: جمع تفاصيل الطلب
+استخدام WhatsApp Flows أو أسئلة متتالية
+flow.js
+معالجة حالة MATCHING: إرسال إشعار للمستقلين
+Utility template لأفضل 3 مستقلين فقط
+flow.js
+معالجة قبول/رفض المستقل وتحديث الـ state
+عند القبول → فتح قناة تواصل مع العميل
+flow.js
+معالجة حالة PAYMENT: توليد رابط دفع وإرساله
+احتجاز المبلغ في Escrow حتى تأكيد الاستلام
+flow.js
+معالجة تأكيد الاستلام وتحرير المبلغ للمستقل
+تحديث order status إلى COMPLETED + خصم عمولة 15%
+flow.js
+💳
+بوابة الدفع والـ Escrow
+0/4
+▶
+ربط Moyasar API لتوليد روابط دفع
+إنشاء PaymentRequest وإرجاع الرابط للعميل
+payment.js
+إعداد Webhook للدفع لاستقبال تأكيد Moyasar
+POST /payment/callback → تحديث حالة الطلب
+payment.js
+منطق Escrow: تجميد المبلغ عند الدفع
+تحديث orders.status إلى PAID_HELD
+payment.js
+دالة releasePayment لتحويل المبلغ للمستقل
+بعد تأكيد العميل أو مرور 48 ساعة تلقائياً
+payment.js
+🚀
+النشر والمراقبة على Replit
+0/4
+▶
+تفعيل Always-On على Replit لضمان عدم النوم
+ضروري لاستقبال Webhooks في أي وقت
+Replit Config
+إضافة /health endpoint للمراقبة
+GET /health → { status: ok, uptime, db: connected }
+index.js
+ضبط UptimeRobot للـ ping كل 5 دقائق
+يبقي الـ Repl مستيقظاً في الخطة المجانية
+External
+إضافة error logging مركزي
+console.error + حفظ الأخطاء الحرجة في DB
+logger.js

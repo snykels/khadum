@@ -1,0 +1,307 @@
+#block-editor-container {
+  position: relative;
+  min-height: 500px;
+}
+
+/* === Core Editor Canvas === */
+.codex-editor {
+  direction: rtl;
+  font-family: var(--font-tajawal), Tahoma, sans-serif !important;
+  color: #e0e0e0 !important;
+}
+
+.codex-editor__redactor {
+  padding-bottom: 120px !important;
+  padding-right: 0 !important;
+  padding-left: 0 !important;
+}
+
+/* === Blocks === */
+.ce-block__content {
+  max-width: 100% !important;
+  margin: 0 !important;
+  padding: 0 4px !important;
+  direction: rtl !important;
+  text-align: right !important;
+  color: #e0e0e0 !important;
+}
+
+.ce-block--focused .ce-block__content {
+  background: rgba(255,255,255,0.03);
+  border-radius: 8px;
+}
+
+.ce-block {
+  margin-bottom: 2px;
+}
+
+/* === Paragraph === */
+.ce-paragraph {
+  color: #e0e0e0 !important;
+  line-height: 1.8 !important;
+  font-size: 16px !important;
+  direction: rtl !important;
+  text-align: right !important;
+}
+
+.ce-paragraph[data-placeholder]:empty::before {
+  color: #555 !important;
+  font-style: normal !important;
+}
+
+/* === Headers === */
+.ce-header {
+  color: #f0f0f0 !important;
+  direction: rtl !important;
+  text-align: right !important;
+  font-family: var(--font-tajawal), Tahoma, sans-serif !important;
+  font-weight: 700 !important;
+}
+
+.ce-header[data-placeholder]::before {
+  color: #555 !important;
+}
+
+/* === Toolbar === */
+.ce-toolbar {
+  direction: ltr !important;
+}
+
+.ce-toolbar__plus,
+.ce-toolbar__settings-btn {
+  background: #2a2a2a !important;
+  color: #e0e0e0 !important;
+  border: 1px solid #3a3a3a !important;
+  border-radius: 8px !important;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.4) !important;
+}
+
+.ce-toolbar__plus:hover,
+.ce-toolbar__settings-btn:hover {
+  background: #333 !important;
+  color: #34cc30 !important;
+}
+
+/* === Popover (Toolbox) === */
+.ce-popover {
+  background: #2a2a2a !important;
+  border: 1px solid #3a3a3a !important;
+  border-radius: 12px !important;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.5) !important;
+  color: #e0e0e0 !important;
+}
+
+.ce-popover__search {
+  background: #1e1e1e !important;
+  border: 1px solid #3a3a3a !important;
+  color: #e0e0e0 !important;
+  border-radius: 8px !important;
+}
+
+.ce-popover__search input {
+  color: #e0e0e0 !important;
+  background: transparent !important;
+}
+
+.ce-popover-item {
+  color: #e0e0e0 !important;
+  border-radius: 8px !important;
+}
+
+.ce-popover-item:hover,
+.ce-popover-item--focused {
+  background: #333 !important;
+  color: #34cc30 !important;
+}
+
+.ce-popover-item__icon {
+  background: #333 !important;
+  color: #e0e0e0 !important;
+  border-radius: 6px !important;
+}
+
+.ce-popover-item:hover .ce-popover-item__icon,
+.ce-popover-item--focused .ce-popover-item__icon {
+  background: #3d4a3d !important;
+  color: #34cc30 !important;
+}
+
+.ce-popover-item__title {
+  direction: rtl !important;
+  font-family: var(--font-tajawal), Tahoma, sans-serif !important;
+}
+
+/* === Inline Toolbar === */
+.ce-inline-toolbar {
+  background: #2a2a2a !important;
+  border: 1px solid #3a3a3a !important;
+  border-radius: 10px !important;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.5) !important;
+}
+
+.ce-inline-tool {
+  color: #e0e0e0 !important;
+}
+
+.ce-inline-tool:hover,
+.ce-inline-tool--active {
+  background: #333 !important;
+  color: #34cc30 !important;
+}
+
+.ce-inline-toolbar__dropdown {
+  background: #2a2a2a !important;
+  border: 1px solid #3a3a3a !important;
+  border-radius: 8px !important;
+}
+
+/* === Conversion Toolbar === */
+.ce-conversion-toolbar {
+  background: #2a2a2a !important;
+  border: 1px solid #3a3a3a !important;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.5) !important;
+  border-radius: 10px !important;
+}
+
+.ce-conversion-tool {
+  color: #e0e0e0 !important;
+}
+
+.ce-conversion-tool:hover,
+.ce-conversion-tool--focused {
+  background: #333 !important;
+  color: #34cc30 !important;
+}
+
+.ce-conversion-tool__icon {
+  background: #333 !important;
+}
+
+/* === Settings Panel === */
+.ce-settings {
+  background: #2a2a2a !important;
+  border: 1px solid #3a3a3a !important;
+  border-radius: 12px !important;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.5) !important;
+}
+
+.ce-settings__plugin-zone--empty::before {
+  color: #666 !important;
+}
+
+.cdx-settings-button {
+  color: #e0e0e0 !important;
+  border-radius: 6px !important;
+}
+
+.cdx-settings-button:hover,
+.cdx-settings-button--active {
+  background: #333 !important;
+  color: #34cc30 !important;
+}
+
+/* === List Block === */
+.cdx-list {
+  color: #e0e0e0 !important;
+  direction: rtl !important;
+  text-align: right !important;
+  padding-right: 24px !important;
+  padding-left: 0 !important;
+}
+
+.cdx-list__item {
+  padding: 4px 0 !important;
+  line-height: 1.7 !important;
+}
+
+/* === Checklist === */
+.cdx-checklist {
+  color: #e0e0e0 !important;
+  direction: rtl !important;
+}
+
+.cdx-checklist__item {
+  direction: rtl !important;
+  flex-direction: row-reverse !important;
+}
+
+.cdx-checklist__item-checkbox {
+  border-color: #555 !important;
+  background: #1e1e1e !important;
+  margin-right: 0 !important;
+  margin-left: 12px !important;
+}
+
+.cdx-checklist__item--checked .cdx-checklist__item-checkbox {
+  background: #34cc30 !important;
+  border-color: #34cc30 !important;
+}
+
+.cdx-checklist__item-text {
+  color: #e0e0e0 !important;
+}
+
+/* === Inline Code === */
+.ce-inline-tool-input {
+  background: #1e1e1e !important;
+  border-color: #3a3a3a !important;
+  color: #e0e0e0 !important;
+}
+
+/* === Image Block === */
+.image-tool {
+  direction: rtl !important;
+}
+
+.image-tool__image {
+  border-radius: 10px !important;
+  overflow: hidden !important;
+}
+
+.image-tool__caption {
+  color: #999 !important;
+  background: transparent !important;
+  border-top: 1px solid #3a3a3a !important;
+  text-align: center !important;
+}
+
+.image-tool__caption[data-placeholder]::before {
+  color: #555 !important;
+}
+
+.image-tool__image-preloader {
+  background: #252525 !important;
+}
+
+.image-tool__image-preloader::after {
+  border-color: #34cc30 transparent transparent !important;
+}
+
+.image-tool--loading .image-tool__image-picture {
+  background: #252525 !important;
+}
+
+/* === Header Levels === */
+.ce-header[data-level="1"] { font-size: 2em !important; }
+.ce-header[data-level="2"] { font-size: 1.6em !important; }
+.ce-header[data-level="3"] { font-size: 1.3em !important; }
+.ce-header[data-level="4"] { font-size: 1.1em !important; }
+
+/* === Drag handle === */
+.ce-toolbar__drag-zone {
+  cursor: grab !important;
+}
+
+.ce-toolbar__drag-zone:active {
+  cursor: grabbing !important;
+}
+
+/* === Input fields in blocks === */
+[contenteditable] {
+  outline: none !important;
+}
+
+/* === Scrollbar === */
+.codex-editor::-webkit-scrollbar { width: 4px; }
+.codex-editor::-webkit-scrollbar-track { background: transparent; }
+.codex-editor::-webkit-scrollbar-thumb { background: #3a3a3a; border-radius: 2px; }

@@ -1,0 +1,181 @@
+بناءً على التوثيق التفصيلي الذي قدمته لمشروع **"خدوم" (Khadom.app)**، قمت بتصميم ملف `schema.sql` متكامل يتوافق مع متطلبات **PostgreSQL** ويوفر البنية التحتية اللازمة لنظام الوساطة عبر واتساب، الدفع عبر Tap، ونظام المحرر (Editor.js).
+
+إليك ملف الهيكلة الكامل والمقسم إلى وحدات (Modules) لتسهيل الإدارة:
+
+---
+
+### ملف `schema.sql` لمشروع خدوم
+
+```sql
+-- تفعيل الإضافات اللازمة
+CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+
+-- ==========================================
+-- 1. الأنواع المخصصة (Enums)
+-- ==========================================
+CREATE TYPE user_role AS ENUM ('client', 'freelancer', 'admin', 'supervisor');
+CREATE TYPE order_status AS ENUM ('pending', 'accepted', 'started', 'completed', 'cancelled', 'disputed');
+CREATE TYPE payment_status AS ENUM ('pending', 'authorized', 'captured', 'failed', 'refunded');
+CREATE TYPE message_party AS ENUM ('client', 'freelancer', 'system', 'admin');
+CREATE TYPE dispute_status AS ENUM ('open', 'under_review', 'resolved', 'closed');
+
+-- ==========================================
+-- 2. الجداول الأساسية (Core Tables)
+-- ==========================================
+
+-- جدول المستخدمين
+CREATE TABLE users (
+    id SERIAL PRIMARY KEY,
+    username VARCHAR(50) UNIQUE NOT NULL,
+    email VARCHAR(100) UNIQUE NOT NULL,
+    password_hash TEXT NOT NULL,
+    phone VARCHAR(20) UNIQUE NOT NULL, -- بصيغة 966XXXXXXXXX
+    role user_role DEFAULT 'client',
+    is_blocked BOOLEAN DEFAULT FALSE,
+    block_reason TEXT,
+    leak_attempts_count INTEGER DEFAULT 0,
+    avatar_url TEXT,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- جدول التصنيفات
+CREATE TABLE categories (
+    id SERIAL PRIMARY KEY,
+    name_ar VARCHAR(100) NOT NULL,
+    name_en VARCHAR(100),
+    slug VARCHAR(100) UNIQUE NOT NULL,
+    description TEXT,
+    icon_name VARCHAR(50)
+);
+
+-- جدول الخدمات
+CREATE TABLE services (
+    id SERIAL PRIMARY KEY,
+    category_id INTEGER REFERENCES categories(id),
+    title VARCHAR(255) NOT NULL,
+    description TEXT,
+    base_price DECIMAL(10, 2),
+    is_active BOOLEAN DEFAULT TRUE
+);
+
+-- ==========================================
+-- 3. نظام الطلبات والوساطة (Orders & Brokerage)
+-- ==========================================
+
+-- جدول الطلبات
+CREATE TABLE orders (
+    id SERIAL PRIMARY KEY,
+    public_code VARCHAR(20) UNIQUE NOT NULL, -- مثال: ORD-12345
+    client_id INTEGER REFERENCES users(id),
+    freelancer_id INTEGER REFERENCES users(id),
+    service_id INTEGER REFERENCES services(id),
+    status order_status DEFAULT 'pending',
+    paid_amount DECIMAL(10, 2) DEFAULT 0,
+    refunded_amount DECIMAL(10, 2) DEFAULT 0,
+    payment_status payment_status DEFAULT 'pending',
+    accepted_at TIMESTAMP WITH TIME ZONE,
+    started_at TIMESTAMP WITH TIME ZONE,
+    completed_at TIMESTAMP WITH TIME ZONE,
+    due_date TIMESTAMP WITH TIME ZONE,
+    metadata JSONB,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- جدول المحادثات
+CREATE TABLE conversations (
+    id SERIAL PRIMARY KEY,
+    order_id INTEGER REFERENCES orders(id),
+    status VARCHAR(20) DEFAULT 'active',
+    last_message_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- رسائل المحادثة
+CREATE TABLE conversation_messages (
+    id SERIAL PRIMARY KEY,
+    conversation_id INTEGER REFERENCES conversations(id),
+    sender_id INTEGER REFERENCES users(id),
+    sender_party message_party NOT NULL,
+    content TEXT NOT NULL,
+    message_type VARCHAR(20) DEFAULT 'text',
+    is_leak_detected BOOLEAN DEFAULT FALSE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- ==========================================
+-- 4. نظام واتساب (WhatsApp AI System)
+-- ==========================================
+
+-- جلسات واتساب (24h TTL)
+CREATE TABLE whatsapp_sessions (
+    id SERIAL PRIMARY KEY,
+    phone_number VARCHAR(20) UNIQUE NOT NULL,
+    session_data JSONB,
+    expires_at TIMESTAMP WITH TIME ZONE NOT NULL,
+    last_interaction TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- طابور وظائف واتساب (Durable Queue)
+CREATE TABLE whatsapp_jobs (
+    id SERIAL PRIMARY KEY,
+    payload JSONB NOT NULL,
+    status VARCHAR(20) DEFAULT 'pending', -- pending, processing, completed, failed
+    attempts INTEGER DEFAULT 0,
+    max_attempts INTEGER DEFAULT 5,
+    error_log TEXT,
+    run_after TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- ==========================================
+-- 5. نظام المدفوعات (Payments - Tap)
+-- ==========================================
+
+-- جلسات الدفع
+CREATE TABLE payment_sessions (
+    id SERIAL PRIMARY KEY,
+    token UUID DEFAULT uuid_generate_v4() UNIQUE,
+    order_id INTEGER REFERENCES orders(id),
+    tap_charge_id VARCHAR(100),
+    amount DECIMAL(10, 2) NOT NULL,
+    currency VARCHAR(3) DEFAULT 'SAR',
+    status payment_status DEFAULT 'pending',
+    return_url TEXT,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- ==========================================
+-- 6. المحتوى والمدونة (Content & Editor.js)
+-- ==========================================
+
+-- الصفحات والمقالات
+CREATE TABLE content_records (
+    id SERIAL PRIMARY KEY,
+    type VARCHAR(20) NOT NULL, -- 'page', 'blog', 'landing'
+    slug VARCHAR(255) UNIQUE,
+    title_ar VARCHAR(255),
+    content_json JSONB, -- تنسيق Editor.js
+    is_published BOOLEAN DEFAULT FALSE,
+    seo_metadata JSONB,
+    author_id INTEGER REFERENCES users(id),
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- إعدادات النظام (Singleton-like)
+CREATE TABLE settings (
+    key VARCHAR(100) PRIMARY KEY,
+    value JSONB
+);
+```
+
+---
+
+### ملاحظات هامة للتنفيذ في Replit:
+
+1.  **استخدام JSONB:** قمت باستخدام نوع `JSONB` في أعمدة مثل `content_json` و `metadata` و `session_data`. هذا يمنحك مرونة هائلة لتخزين مخرجات **Editor.js** وبيانات الـ AI Agent دون الحاجة لتغيير الهيكل مستقبلاً.
+2.  **الأمان والوساطة:** جدول `conversation_messages` يتضمن حقل `is_leak_detected` لدعم نظام الـ **Leak Detector** الذي ذكرته في متطلباتك، لمنع تبادل أرقام التواصل المباشر.
+3.  **طابور الوظائف (Queue):** جدول `whatsapp_jobs` مصمم ليعمل مع `FOR UPDATE SKIP LOCKED` كما طلبت في مهمة (Task #17) لضمان عدم ضياع أي رسالة واتساب واردة.
+4.  **التوقيت الزمني:** استخدمت `TIMESTAMP WITH TIME ZONE` لضمان دقة العمليات وتوقيتات "مدى" و "تاب" عبر المناطق الزمنية المختلفة.
+
+**هل تريدني أن أكتب لك كود `db.ts` باستخدام `Drizzle ORM` الذي يطابق هذا الهيكل تماماً؟**

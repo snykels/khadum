@@ -1,0 +1,53 @@
+Act as a Senior UI/UX Designer and Frontend Developer. I need to redesign and build a modern, highly efficient Admin Support Dashboard (Dark Mode default) for a freelance/service marketplace. 
+
+The current system is chaotic, poorly structured with too many top-bar tabs, lacks clear actions (like closing cases), and mixes different communication channels (WhatsApp, direct site messages, freelancer disputes) making it hard to manage. 
+
+Please build a new React/TailwindCSS responsive layout using the following architecture and strict requirements:
+
+### 1. Global Layout Structure
+- Sidebar (Left): Main navigation menu.
+- Topbar: Global search, Notifications, Admin Profile, and Quick Action button ("+ New Ticket").
+- Main Content Area (Right/Center): Dynamic view based on sidebar selection.
+
+### 2. Sidebar Navigation (The New Hierarchy)
+Group the chaos into logical modules:
+- 📥 Omnichannel Inbox (صندوق الوارد الموحد)
+- 🗂️ Support Center (مركز الدعم)
+  - Tickets & Inquiries
+  - Refund Requests
+  - Task Transfers
+- ⚖️ Disputes & Arbitration (النزاعات)
+- 🛡️ Security & Monitoring (الرقابة والأمان)
+  - Leakage Attempts
+  - Admin Interventions
+- 📊 Reports & Analytics (التقارير)
+
+### 3. Detailed View Requirements & Missing Features to Add:
+
+#### A. Omnichannel Inbox (The core chat interface)
+- Left Panel: Chat list. MUST include visual badges/icons to distinguish the source (WhatsApp icon, Web Form icon, Freelancer icon).
+- Filter Chips: All, Unread, Assigned to Me, WhatsApp, Web, Urgent.
+- Right Panel (Chat Window): 
+  - Chat history.
+  - Quick Reply Templates selector.
+  - MISSING ACTIONS TO ADD: "Mark as Resolved/Close", "Escalate", "Block User", "Convert to Dispute".
+- Right Sidebar (User Context): When a chat is open, show a side panel with the user's details, recent orders, and past ticket history so the admin understands the context immediately.
+
+#### B. Support Center & Disputes (Workflow management)
+- Instead of simple empty tables, use a Kanban board OR a robust Data Table with inline actions.
+- Statuses must be clear: [New, Open, Pending User, Under Review, Closed/Resolved].
+- MISSING ACTIONS TO ADD: Every row/ticket must have an Action dropdown (⋮) with options: "View Details", "Assign Admin", "Change Status -> Closed", "Issue Refund".
+- Provide a clear workflow to handle "Disputes" with a specialized view showing both parties' evidence side-by-side.
+
+#### C. Security & Monitoring (Leakage & Interventions)
+- Redesign the "Leakage Attempts (محاولات التسريب)" view.
+- Show the masked text vs. original text clearly.
+- MISSING ACTIONS TO ADD: Include immediate action buttons on each row: "Send Warning", "Ban User", "Ignore/False Positive".
+
+### 4. UI/UX Guidelines
+- Framework: React with Tailwind CSS. Use Lucide-react for modern icons.
+- Color Palette: Professional Dark Mode (slate-900 background, surface panels in slate-800, primary accents in modern blue or emerald green for success states, red for escalations/leakages).
+- Empty States: Do not just show "No data". Show beautiful empty states with illustrations and a CTA button (e.g., "Refresh Data" or "Go to Inbox").
+- Modals: Use pop-up modals for complex actions (like processing a refund or resolving a dispute) rather than redirecting to new pages.
+
+Please generate the complete scaffold for this dashboard, starting with the Sidebar, Topbar, and the layout for the "Omnichannel Inbox" as the default active view. Ensure all the action buttons mentioned (Close, Assign, Warn) are visibly implemented in the UI.
